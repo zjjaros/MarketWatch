@@ -26,7 +26,6 @@ async def current():
         if "bitcoin" not in data or "usd" not in data["bitcoin"]:
             result += "Error: Unexpected API Response"
 
-        #result += ("BTC: " + str(float(data["bitcoin"]["usd"])))
         dictPrices.update({"BTC":str(float(data["bitcoin"]["usd"]))})
     except requests.exceptions.RequestException as e:
         result += ("Network/API Error: " + str(e))
@@ -35,10 +34,8 @@ async def current():
 
     try:
         data = requests.get(goldUrl).json()
-        #result += "    " + str(data["symbols"][0]["price"])
         gold_price = str(data["symbols"][0]["price"])
 
-        #result += ("\r\nGold: " + gold_price)
         dictPrices.update({"Gold" : gold_price})
 
     except Exception as e:
