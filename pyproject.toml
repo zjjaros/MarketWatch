@@ -3,8 +3,12 @@ name = "marketwatch"
 version = "0.1.0"
 requires-python = ">=3.14"
 dependencies = [
+    "alembic>=1.19.2",
     "fastapi[standard]>=0.141.1",
+    "psycopg[binary]>=3.3.5",
+    "python-dotenv>=1.2.3",
     "requests>=2.34.2",
+    "sqlalchemy>=2.0.52",
 ]
 [tool.fastapi]
-entrypoint = "api.main:app"
+entrypoint = "app.main:app"
