@@ -16,6 +16,8 @@ Alembic flow:
 6. Database updated
 
 #Useful commands
+cmd: uv run python -m path.to.file  (No .py)
+    desc: Run a file WITHIN the known project area.
 cmd: uv run python <file>.py
     desc: Run a specific python file
 cmd: uv run alembic check

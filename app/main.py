@@ -2,9 +2,9 @@ import requests
 from fastapi import FastAPI, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from database import get_db
-from datetime import datetime, timezone
-from models import PriceObservation
+from app.database import get_db
+from datetime import datetime, timedelta, timezone
+from app.models import PriceObservation
 
 coinGeckoUrl = "https://api.coingecko.com/api/v3/simple/price"
 goldUrl = "https://api.goldprice.dev/v1/prices?symbol=XAU-USD-SPOT"
@@ -32,14 +32,6 @@ async def current(db: Session = Depends(get_db)):
             result += "Error: Unexpected API Response"
 
         dictPrices.update({"BTC":str(float(data["bitcoin"]["usd"]))})
-        observation = PriceObservation(
-            asset="BTC",
-            price=float(data["bitcoin"]["usd"]),
-            timestamp=datetime.now(timezone.utc),
-            source="CoinGecko"
-        )
-        db.add(observation)
-        db.commit()
 
     except requests.exceptions.RequestException as e:
         result += ("Network/API Error: " + str(e))
@@ -51,14 +43,6 @@ async def current(db: Session = Depends(get_db)):
         gold_price = str(data["symbols"][0]["price"])
 
         dictPrices.update({"Gold" : gold_price})
-        observation = PriceObservation(
-            asset="Gold",
-            price=float(gold_price),
-            timestamp=datetime.now(timezone.utc),
-            source="GoldPriceAPI"
-        )
-        db.add(observation)
-        db.commit()
 
     except Exception as e:
         result += "Gold Data Retrieval Error" + str(e)
@@ -84,3 +68,26 @@ async def assetHistory(asset: str, db: Session = Depends(get_db), limit: int = N
     except Exception as e:
         return {"message": f"Error retrieving {asset} price history", "error": str(e)}
 
+@app.get("/prices/{asset}/trend")
+async def assetTrend(asset: str, db: Session = Depends(get_db), days: int = None):
+    try:
+        if days:
+            cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days))
+        else:
+            cutoff = (datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(weeks=260))
+
+        print(cutoff)
+
+        observations = db.query(PriceObservation).filter(func.lower(PriceObservation.asset) == asset.lower()).order_by(PriceObservation.timestamp.desc()).where(PriceObservation.timestamp >= cutoff).all()
+
+        prices = []
+
+        for ob in observations:
+            prices.append([ob.timestamp, ob.price])
+
+        return {
+            "asset": asset,
+            "prices": prices
+        }
+    except Exception as e:
+        return {"message": f"Error determining trend for {asset}", "error": str(e)}
