@@ -1,5 +1,7 @@
 import requests
 from fastapi import FastAPI, Depends
+from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.database import get_db
@@ -14,10 +16,12 @@ BTCSymbol = {
 }
 
 app = FastAPI()
+app.mount("/display", StaticFiles(directory="display"), name="display")
 
 @app.get("/")
 async def health():
-    return {"status": "Healthy"}
+    app.mount("/display", StaticFiles(directory="display"), name="display")
+    return FileResponse("display/index.html")
 
 @app.get("/prices")
 async def current(db: Session = Depends(get_db)):
@@ -49,7 +53,7 @@ async def current(db: Session = Depends(get_db)):
 
     result = dictPrices
     #return result
-    return {"message": "Success", "data": result}
+    return result
 
 @app.get("/prices/{asset}/history")
 async def assetHistory(asset: str, db: Session = Depends(get_db), limit: int = None):
@@ -85,9 +89,6 @@ async def assetTrend(asset: str, db: Session = Depends(get_db), days: int = None
         for ob in observations:
             prices.append([ob.timestamp, ob.price])
 
-        return {
-            "asset": asset,
-            "prices": prices
-        }
+        return prices
     except Exception as e:
         return {"message": f"Error determining trend for {asset}", "error": str(e)}

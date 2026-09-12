@@ -5,25 +5,27 @@
 </head>
 <body>
 
+
 <h1>Market Watch</h1>
+<h2>Health: <span id="health"></span></h2>
 
 <h2>Bitcoin</h2>
-<p>Current:</p>
-<p>7-Day Change:</p>
-<p>High:</p>
-<p>Low:</p>
+<p>Current: <span id="bitcoin-current"></span></p>
+<p><span class="BTC-d"></span>-Day Change: <span id="bitcoin-day"></span></p>
+<p><span class="BTC-d"></span>-Day High: <span id="bitcoin-high"></span></p>
+<p><span class="BTC-d"></span>-Day Low: <span id="bitcoin-low"></span></p>
 
-<button>1-Day</button> <button>7-day</button> <button>30-day</button> <button>All Time</button>
+<button type="button" onclick="updateTrend('BTC', 1, 'bitcoin-day', 'bitcoin-high', 'bitcoin-low')">1-Day</button> <button type="button" onclick="updateTrend('BTC', 7, 'bitcoin-day', 'bitcoin-high', 'bitcoin-low')">7-day</button> <button type="button" onclick="updateTrend('BTC', 30, 'bitcoin-day', 'bitcoin-high', 'bitcoin-low')">30-day</button> <button type="button" onclick="updateTrend('BTC', 365, 'bitcoin-day', 'bitcoin-high', 'bitcoin-low')">1-Year</button>
 
 <h2>Gold</h2>
-<p>Current:</p>
-<p>7-Day Change:</p>
-<p>High:</p>
-<p>Low:</p>
+<p>Current: <span id="gold-current"></span></p>
+<p><span class="Gold-d"></span>-Day Change: <span id="gold-day"></span></p>
+<p><span class="Gold-d"></span>-Day High: <span id="gold-high"></span></p>
+<p><span class="Gold-d"></span>-Day Low: <span id="gold-low"></span></p>
 
-<button>1-Day</button> <button>7-day</button> <button>30-day</button> <button>All Time</button>
+<button type="button" onclick="updateTrend('Gold', 1, 'gold-day', 'gold-high', 'gold-low')">1-Day</button> <button type="button" onclick="updateTrend('Gold', 7, 'gold-day', 'gold-high', 'gold-low')">7-day</button> <button type="button" onclick="updateTrend('Gold', 30, 'gold-day', 'gold-high', 'gold-low')">30-day</button> <button type="button" onclick="updateTrend('Gold', 365, 'gold-day', 'gold-high', 'gold-low')">1-Year</button>
 
-
+<script src="/display/index.js"></script>
 
 </body>
 </html>
