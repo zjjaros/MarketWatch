@@ -29,3 +29,19 @@ cmd: uv run alembic upgrade head
     desc: executes the scaffolded code
 cmd: uv run alembic downgrade -1
     desc: reverses the history of the database by 1 "migration"
+
+docker build -t <imagename> .
+docker images
+docker compose up -d
+docker compose ps 
+docker compose up -d --build
+docker compose exec <imagename> <command>
+
+#PostgreSQL
+pg_dump -U postgres -d <DB> -F c -f <DB>_backup.dump
+
+
+restore an old backup:
+docker cp .\marketwatch_backup.dump marketwatch-postgres-1:/tmp/marketwatch_backup.dump
+docker compose exec postgres pg_restore -U postgres -d marketwatch --clean --if-exists /tmp/marketwatch_backup.dump
+docker compose exec postgres psql -U postgres -d marketwatch -c "SELECT * FROM price_observations;"

@@ -13,12 +13,6 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 db = SessionLocal()
 
-try:
-    result = db.execute(text("SELECT version()"))
-    print(result.fetchone())
-finally:
-    db.close()
-
 def get_db():
     db = SessionLocal()
     try:
