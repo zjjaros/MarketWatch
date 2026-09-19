@@ -45,3 +45,49 @@ restore an old backup:
 docker cp .\marketwatch_backup.dump marketwatch-postgres-1:/tmp/marketwatch_backup.dump
 docker compose exec postgres pg_restore -U postgres -d marketwatch --clean --if-exists /tmp/marketwatch_backup.dump
 docker compose exec postgres psql -U postgres -d marketwatch -c "SELECT * FROM price_observations;"
+
+
+Ideal AWS Structure:
+                         Internet
+                            │
+                            ▼
+                    ┌───────────────┐
+                    │      ALB      │
+                    │ Load Balancer │
+                    └───────┬───────┘
+                            │
+                     ┌──────┴──────┐
+                     ▼             ▼
+                 ┌───────┐     ┌───────┐
+                 │ API 1 │     │ API 2 │
+                 │  EC2  │     │  EC2  │
+                 └───┬───┘     └───┬───┘
+                     │             │
+                     └──────┬──────┘
+                            ▼
+                    ┌───────────────┐
+                    │ RDS PostgreSQL│
+                    └───────▲───────┘
+                            │
+                     ┌──────┴──────┐
+                     │  Collector  │
+                     │    EC2      │
+                     └─────────────┘
+
+For the collector, the proper way would be:
+Private EC2
+    │
+    ▼
+Private Route Table
+    │
+    ▼
+NAT Gateway  💰
+    │
+    ▼
+Internet Gateway
+    │
+    ▼
+Internet
+
+But this is a $0 budget project, so we're doing something different. In a real business
+scenario, there would be NAT gateways everywhere.
