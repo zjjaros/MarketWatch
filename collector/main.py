@@ -1,5 +1,3 @@
-from sqlalchemy.orm import Session
-from sqlalchemy import func
 from app.database import get_db
 from datetime import datetime, timezone
 from app.models import PriceObservation
