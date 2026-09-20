@@ -37,9 +37,65 @@ docker compose ps
 docker compose up -d --build
 docker compose exec <imagename> <command>
 
+#ssh
+ssh -i "$HOME\.ssh\<YOUR_PEM_FILE>.pem" ubuntu@<YOUR_EC2_PUBLIC_IP>
+
 #PostgreSQL
 pg_dump -U postgres -d <DB> -F c -f <DB>_backup.dump
 
+#AWS
+Manual creating a role for an EC2 instance to use certain permissions:
+aws iam create-role `
+  --role-name MarketWatchEC2Role `
+  --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+
+Manually creating a policy for that role:
+aws iam put-role-policy `
+   --role-name MarketWatchEC2Role `
+   --policy-name MarketWatchECRPull `
+   --policy-document file://<rel path to your policy>.json
+
+Manually creating an instance profile
+aws iam create-instance-profile `
+   --instance-profile-name MarketWatchEC2Profile
+
+Manually attaching the role to the instance profile:
+aws iam add-role-to-instance-profile `
+  --instance-profile-name MarketWatchEC2Profile `
+  --role-name MarketWatchEC2Role
+
+Get an instance ID from EC2:
+aws ec2 describe-instances `
+  --filters "Name=tag:Name,Values=marketwatch-api" `
+  --query "Reservations[].Instances[].InstanceId" `
+  --output text `
+  --region us-west-2
+
+Manually connect the instance with the profile
+aws ec2 associate-iam-instance-profile `
+  --instance-id i-056e3b718b7235e54 `
+  --iam-instance-profile Name=MarketWatchEC2Profile `
+  --region us-west-2
+
+#SSH:
+Get the token (that IP is specificly reserved for EC2 Instance Metadata Service (IMDS))
+$TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
+  -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
+
+curl -sS \
+  -H "X-aws-ec2-metadata-token: $TOKEN" \
+  http://169.254.169.254/latest/meta-data/iam/info
+
+Ensure apt get is up to date and knows whats available:
+sudo apt update
+
+Installing the AWS CLI
+sudo apt install -y awscli
+
+Login to docker from AWS instance (using borrowed permissions)
+aws ecr get-login-password --region us-west-2 | \
+sudo docker login --username AWS --password-stdin \
+997956187142.dkr.ecr.us-west-2.amazonaws.com
 
 restore an old backup:
 docker cp .\marketwatch_backup.dump marketwatch-postgres-1:/tmp/marketwatch_backup.dump
