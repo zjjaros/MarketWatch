@@ -24,15 +24,9 @@ resource "aws_instance" "marketwatch_api" {
 
   key_name = "marketwatch-ec2"
 
-  user_data = <<-EOF
-    #!/bin/bash
+  iam_instance_profile = aws_iam_instance_profile.marketwatch_ec2.name
 
-    apt update
-    apt install -y docker.io docker-compose-v2
-
-    systemctl enable docker
-    systemctl start docker
-  EOF
+  user_data = file("${path.module}/user-data.sh")
 
   user_data_replace_on_change = true
 
