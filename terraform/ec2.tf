@@ -33,4 +33,8 @@ resource "aws_instance" "marketwatch_api" {
   tags = {
     Name = "marketwatch-api"
   }
+
+  lifecycle {
+    ignore_changes = [ami]
+  }
 }
