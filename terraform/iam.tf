@@ -75,8 +75,9 @@ resource "aws_iam_role" "github_actions" {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
           }
 
-          StringLike = {
-            "token.actions.githubusercontent.com:sub" = "repo:zjjaros/MarketWatch:*"
+          StringEquals = {
+            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
+            "token.actions.githubusercontent.com:sub" = "repo:zjjaros/MarketWatch:ref:refs/heads/main"
           }
         }
       }
