@@ -178,3 +178,20 @@ resource "aws_iam_role_policy" "marketwatch_rds_secret" {
     ]
   })
 }
+
+
+resource "aws_iam_role_policy" "marketwatch_rds_discovery" {
+  name = "MarketWatchRDSDiscovery"
+  role = aws_iam_role.marketwatch_ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["rds:DescribeDBInstances"]
+        Resource = "*"
+      }
+    ]
+  })
+}
