@@ -13,7 +13,7 @@ services:
       timeout: 5s
       retries: 5
   api:
-    build: .
+    image: 997956187142.dkr.ecr.us-west-2.amazonaws.com/marketwatch:latest
     ports:
       - "8000:8000"
     environment:
@@ -22,7 +22,7 @@ services:
       postgres:
         condition: service_healthy
   collector:
-    build: .
+    image: 997956187142.dkr.ecr.us-west-2.amazonaws.com/marketwatch:latest
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}
     command: python -m collector.main

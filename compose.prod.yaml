@@ -1,0 +1,16 @@
+
+services:
+  api:
+    image: 997956187142.dkr.ecr.us-west-2.amazonaws.com/marketwatch:latest
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+    restart: unless-stopped
+
+  collector:
+    image: 997956187142.dkr.ecr.us-west-2.amazonaws.com/marketwatch:latest
+    command: ["python", "-m", "collector.main"]
+    environment:
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL must be set}
+    restart: unless-stopped

@@ -19,6 +19,8 @@ venv.bak/
 *.tfstate.*
 crash.log
 crash.*.log
+terraform/recovery.auto.tfvars
+terraform/recovery.pending.tfvars
 
 # Postgres Data
 *.dump

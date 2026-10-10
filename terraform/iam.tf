@@ -40,6 +40,11 @@ resource "aws_iam_role_policy" "marketwatch_ecr_pull" {
   })
 }
 
+resource "aws_iam_role_policy_attachment" "marketwatch_ssm_core" {
+  role       = aws_iam_role.marketwatch_ec2.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_instance_profile" "marketwatch_ec2" {
   name = "MarketWatchEC2Profile"
   role = aws_iam_role.marketwatch_ec2.name
@@ -73,11 +78,7 @@ resource "aws_iam_role" "github_actions" {
         Condition = {
           StringEquals = {
             "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-          }
-
-          StringEquals = {
-            "token.actions.githubusercontent.com:aud" = "sts.amazonaws.com"
-            "token.actions.githubusercontent.com:sub" = "repo:zjjaros/MarketWatch:ref:refs/heads/main"
+            "token.actions.githubusercontent.com:sub" = "repo:zjjaros@325443401/MarketWatch@1358608721:ref:refs/heads/main"
           }
         }
       }
@@ -109,6 +110,70 @@ resource "aws_iam_role_policy" "github_actions_ecr" {
           "ecr:UploadLayerPart"
         ]
         Resource = aws_ecr_repository.marketwatch.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "github_actions_ssm_deploy" {
+  name = "MarketWatchGitHubActionsSSMDeploy"
+  role = aws_iam_role.github_actions.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Sid      = "SendDeploymentCommand"
+        Effect   = "Allow"
+        Action   = "ssm:SendCommand"
+        Resource = "arn:aws:ssm:us-west-2::document/AWS-RunShellScript"
+      },
+      {
+        Sid      = "TargetMarketWatchInstance"
+        Effect   = "Allow"
+        Action   = "ssm:SendCommand"
+        Resource = "arn:aws:ec2:us-west-2:997956187142:instance/*"
+
+        Condition = {
+          StringEquals = {
+            "ssm:resourceTag/Project" = "MarketWatch"
+          }
+        }
+      },
+      {
+        Sid    = "CheckDeployment"
+        Effect = "Allow"
+        Action = [
+          "ssm:GetCommandInvocation",
+          "ssm:ListCommandInvocations",
+          "ssm:ListCommands"
+        ]
+        Resource = "*"
+      },
+      {
+        Sid      = "FindDeploymentTarget"
+        Effect   = "Allow"
+        Action   = "ec2:DescribeInstances"
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+
+resource "aws_iam_role_policy" "marketwatch_rds_secret" {
+  name = "MarketWatchRDSSecretRead"
+  role = aws_iam_role.marketwatch_ec2.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "secretsmanager:GetSecretValue"
+        ]
+        Resource = aws_db_instance.marketwatch.master_user_secret[0].secret_arn
       }
     ]
   })
