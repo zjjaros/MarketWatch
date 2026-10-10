@@ -81,7 +81,8 @@ jobs:
             --arg secret "$DB_SECRET_ARN" \
             '{
               commands: [
-                "set -euo pipefail",
+                "#!/bin/bash",
+                "set -eu",
                 "mkdir -p /opt/marketwatch",
                 ("printf %s " + ($script | @sh) + " | base64 -d > /opt/marketwatch/deploy-ec2.sh"),
                 ("printf %s " + ($compose | @sh) + " | base64 -d > /opt/marketwatch/compose.prod.yaml"),
