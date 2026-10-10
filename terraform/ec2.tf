@@ -31,7 +31,9 @@ resource "aws_instance" "marketwatch_api" {
   user_data_replace_on_change = true
 
   tags = {
-    Name = "marketwatch-api"
+    Name         = "marketwatch-api"
+    Project      = "MarketWatch"
+    RDSSecretArn = aws_db_instance.marketwatch.master_user_secret[0].secret_arn
   }
 
   lifecycle {

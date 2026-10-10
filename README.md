@@ -37,11 +37,21 @@ docker compose ps
 docker compose up -d --build
 docker compose exec <imagename> <command>
 
+#get IP of EC2:
+aws ec2 describe-instances --filters "Name=tag:Name,Values=marketwatch-api" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+
 #ssh
 ssh -i "$HOME\.ssh\<YOUR_PEM_FILE>.pem" ubuntu@<YOUR_EC2_PUBLIC_IP>
 
+
+#copy a file over:
+scp -i "$HOME\.ssh\<YOUR_PEM_FILE>.pem" <FILE> ubuntu@<YOUR_EC2_PUBLIC_IP>:/tmp/<FILE>
+
 #PostgreSQL
 pg_dump -U postgres -d <DB> -F c -f <DB>_backup.dump
+
+#access RDS from EC2
+psql -h marketwatch-db.cbgy00sw8vm2.us-west-2.rds.amazonaws.com -p 5432 -U marketwatch -d marketwatch
 
 #AWS
 Manual creating a role for an EC2 instance to use certain permissions:
@@ -76,6 +86,12 @@ aws ec2 associate-iam-instance-profile `
   --instance-id i-056e3b718b7235e54 `
   --iam-instance-profile Name=MarketWatchEC2Profile `
   --region us-west-2
+
+#get the arn of a secret:
+aws rds describe-db-instances --db-instance-identifier marketwatch-db --region us-west-2 --query "DBInstances[0].MasterUserSecret.SecretArn" --output text
+
+#get the actual text of the secret (be careful here)
+aws secretsmanager get-secret-value --secret-id "<your arn secret here>" --region us-west-2 --query SecretString --output text
 
 #SSH:
 Get the token (that IP is specificly reserved for EC2 Instance Metadata Service (IMDS))

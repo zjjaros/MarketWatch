@@ -1,4 +1,5 @@
-name: Build and Push MarketWatch
+
+name: Build, Push, and Deploy MarketWatch
 
 on:
   push:
@@ -14,20 +15,12 @@ env:
   ECR_REPOSITORY: marketwatch
 
 jobs:
-  build-and-push:
+  build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
-
-      - name: Debug GitHub identity
-        run: |
-          echo "Repository: ${{ github.repository }}"
-          echo "Repository ID: ${{ github.repository_id }}"
-          echo "Repository Owner ID: ${{ github.repository_owner_id }}"
-          echo "Ref: ${{ github.ref }}"
-          echo "Event: ${{ github.event_name }}"
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -43,5 +36,104 @@ jobs:
         env:
           ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
         run: |
-          docker build -t $ECR_REGISTRY/$ECR_REPOSITORY:latest .
-          docker push $ECR_REGISTRY/$ECR_REPOSITORY:latest
+          docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" .
+          docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
+
+      - name: Find EC2 instance and current database secret
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          INSTANCE_INFO="$(aws ec2 describe-instances \
+            --filters \
+              "Name=tag:Name,Values=marketwatch-api" \
+              "Name=instance-state-name,Values=running" \
+            --region "$AWS_REGION" \
+            --query "Reservations[].Instances[].[InstanceId,Tags[?Key=='RDSSecretArn'].Value | [0]]" \
+            --output text)"
+
+          if [[ -z "$INSTANCE_INFO" ]]; then
+            echo "ERROR: Could not find a running MarketWatch EC2 instance."
+            exit 1
+          fi
+
+          read -r INSTANCE_ID DB_SECRET_ARN <<< "$INSTANCE_INFO"
+
+          if [[ -z "$INSTANCE_ID" || -z "$DB_SECRET_ARN" || "$DB_SECRET_ARN" == "None" ]]; then
+            echo "ERROR: Instance ID or RDSSecretArn tag is missing."
+            exit 1
+          fi
+
+          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
+          echo "DB_SECRET_ARN=$DB_SECRET_ARN" >> "$GITHUB_ENV"
+
+      - name: Send deployment to EC2 through SSM
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          SCRIPT_B64="$(base64 -w 0 scripts/deploy-ec2.sh)"
+          COMPOSE_B64="$(base64 -w 0 compose.prod.yaml)"
+
+          jq -n \
+            --arg script "$SCRIPT_B64" \
+            --arg compose "$COMPOSE_B64" \
+            --arg secret "$DB_SECRET_ARN" \
+            '{
+              commands: [
+                "set -euo pipefail",
+                "mkdir -p /opt/marketwatch",
+                ("printf %s " + ($script | @sh) + " | base64 -d > /opt/marketwatch/deploy-ec2.sh"),
+                ("printf %s " + ($compose | @sh) + " | base64 -d > /opt/marketwatch/compose.prod.yaml"),
+                "chmod 700 /opt/marketwatch/deploy-ec2.sh",
+                ("export DB_SECRET_ARN=" + ($secret | @sh) + " && /opt/marketwatch/deploy-ec2.sh")
+              ]
+            }' > ssm-parameters.json
+
+          COMMAND_ID="$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy MarketWatch from GitHub Actions" \
+            --parameters file://ssm-parameters.json \
+            --query "Command.CommandId" \
+            --output text)"
+
+          echo "SSM deployment command submitted."
+
+          for attempt in $(seq 1 60); do
+            STATUS="$(aws ssm get-command-invocation \
+              --region "$AWS_REGION" \
+              --command-id "$COMMAND_ID" \
+              --instance-id "$INSTANCE_ID" \
+              --query "Status" \
+              --output text 2>/dev/null || true)"
+
+            case "$STATUS" in
+              Success)
+                echo "EC2 deployment completed successfully."
+                aws ssm get-command-invocation \
+                  --region "$AWS_REGION" \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "StandardOutputContent" \
+                  --output text
+                exit 0
+                ;;
+              Failed|TimedOut|Cancelled|Cancelling)
+                echo "ERROR: EC2 deployment ended with status: $STATUS"
+                aws ssm get-command-invocation \
+                  --region "$AWS_REGION" \
+                  --command-id "$COMMAND_ID" \
+                  --instance-id "$INSTANCE_ID" \
+                  --query "[StandardOutputContent,StandardErrorContent]" \
+                  --output json
+                exit 1
+                ;;
+            esac
+
+            sleep 5
+          done
+
+          echo "ERROR: Timed out waiting for deployment. Check Systems Manager Run Command."
+          exit 1
