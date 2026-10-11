@@ -93,15 +93,24 @@ jobs:
             --arg compose "$COMPOSE_B64" \
             --arg secret "$API_DB_SECRET_ARN" \
             '{
-              commands: [
+            commands: [
                 "#!/bin/bash",
-                "set -eux",
+                "set -eu",
+                "echo '[ssm] Creating deployment directory'",
                 "mkdir -p /opt/marketwatch",
-                ("printf %s " + ($script | @sh) + " | base64 -d > /opt/marketwatch/deploy-ec2.sh"),
-                ("printf %s " + ($compose | @sh) + " | base64 -d > /opt/marketwatch/compose.api.yaml"),
+                "echo '[ssm] Writing deployment script'",
+                ("printf '%s' " + ($script | @sh) + " | base64 -d > /opt/marketwatch/deploy-ec2.sh"),
+                "echo '[ssm] Writing API Compose file'",
+                ("printf '%s' " + ($compose | @sh) + " | base64 -d > /opt/marketwatch/compose.api.yaml"),
                 "chmod 700 /opt/marketwatch/deploy-ec2.sh",
-                ("export DB_SECRET_ARN=" + ($secret | @sh) + " && /opt/marketwatch/deploy-ec2.sh")
-              ]
+                "echo '[ssm] Checking deployment files'",
+                "test -s /opt/marketwatch/deploy-ec2.sh",
+                "test -s /opt/marketwatch/compose.api.yaml",
+                "echo '[ssm] Exporting database secret ARN'",
+                ("export DB_SECRET_ARN=" + ($secret | @sh)),
+                "echo '[ssm] Starting API deployment'",
+                "/bin/bash /opt/marketwatch/deploy-ec2.sh"
+                ]
             }' > ssm-parameters.json
 
           COMMAND_ID="$(aws ssm send-command \
