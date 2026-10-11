@@ -1,6 +1,4 @@
-
 #!/usr/bin/env bash
-
 set -Eeuo pipefail
 
 REGION="us-west-2"

@@ -94,6 +94,7 @@ jobs:
             --arg secret "$API_DB_SECRET_ARN" \
             '{
               commands: [
+                "#!/bin/bash",
                 "set -eu",
                 "mkdir -p /opt/marketwatch",
                 ("printf %s " + ($script | @sh) + " | base64 -d > /opt/marketwatch/deploy-ec2.sh"),
@@ -128,6 +129,7 @@ jobs:
             --arg secret "$COLLECTOR_DB_SECRET_ARN" \
             '{
               commands: [
+                "#!/bin/bash",
                 "set -eu",
                 "mkdir -p /opt/marketwatch",
                 ("printf %s " + ($script | @sh) + " | base64 -d > /opt/marketwatch/deploy-collector-ec2.sh"),
