@@ -1,26 +1,24 @@
+
 #!/bin/bash
+set -euxo pipefail
 
-set -e
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y \
+  docker.io \
+  docker-compose-v2 \
+  unzip \
+  curl
 
-apt update
-apt install -y docker.io docker-compose-v2
+systemctl enable --now docker
 
-systemctl enable docker
-systemctl start docker
+curl -fsSL \
+  "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" \
+  -o /tmp/awscliv2.zip
 
-apt install -y unzip
+unzip -q /tmp/awscliv2.zip -d /tmp
+/tmp/aws/install
 
-curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+rm -rf /tmp/aws /tmp/awscliv2.zip
 
-unzip awscliv2.zip
-
-./aws/install
-
-echo 'export PATH="/usr/local/bin:$PATH"' >> /etc/profile
-source /etc/profile
-
-aws ecr get-login-password --region us-west-2 | \
-docker login --username AWS --password-stdin \
-997956187142.dkr.ecr.us-west-2.amazonaws.com
-
-docker pull 997956187142.dkr.ecr.us-west-2.amazonaws.com/marketwatch:latest
+# Ubuntu 24.04 normally uses snap/systemd-managed SSM Agent if present.
+# Do not perform ECR login or pull here; deployment handles those steps.

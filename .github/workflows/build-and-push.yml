@@ -39,53 +39,65 @@ jobs:
           docker build -t "$ECR_REGISTRY/$ECR_REPOSITORY:latest" .
           docker push "$ECR_REGISTRY/$ECR_REPOSITORY:latest"
 
-      - name: Find EC2 instance and current database secret
+      - name: Find EC2 instances and database secrets
         shell: bash
         run: |
           set -euo pipefail
 
-          INSTANCE_INFO="$(aws ec2 describe-instances \
-            --filters \
-              "Name=tag:Name,Values=marketwatch-api" \
-              "Name=instance-state-name,Values=running" \
-            --region "$AWS_REGION" \
-            --query "Reservations[].Instances[].[InstanceId,Tags[?Key=='RDSSecretArn'].Value | [0]]" \
-            --output text)"
+          find_instance() {
+            local name="$1"
+            local info
 
-          if [[ -z "$INSTANCE_INFO" ]]; then
-            echo "ERROR: Could not find a running MarketWatch EC2 instance."
-            exit 1
-          fi
+            info="$(aws ec2 describe-instances \
+              --region "$AWS_REGION" \
+              --filters \
+                "Name=tag:Name,Values=$name" \
+                "Name=instance-state-name,Values=running" \
+              --query "Reservations[].Instances[].[InstanceId,Tags[?Key=='RDSSecretArn'].Value | [0]]" \
+              --output text)"
 
-          read -r INSTANCE_ID DB_SECRET_ARN <<< "$INSTANCE_INFO"
+            if [[ -z "$info" || "$info" == "None" ]]; then
+              echo "ERROR: Could not find running instance: $name" >&2
+              return 1
+            fi
 
-          if [[ -z "$INSTANCE_ID" || -z "$DB_SECRET_ARN" || "$DB_SECRET_ARN" == "None" ]]; then
-            echo "ERROR: Instance ID or RDSSecretArn tag is missing."
-            exit 1
-          fi
+            local instance_id secret_arn
+            read -r instance_id secret_arn <<< "$info"
 
-          echo "INSTANCE_ID=$INSTANCE_ID" >> "$GITHUB_ENV"
-          echo "DB_SECRET_ARN=$DB_SECRET_ARN" >> "$GITHUB_ENV"
+            if [[ -z "$instance_id" || -z "$secret_arn" || "$secret_arn" == "None" ]]; then
+              echo "ERROR: Missing instance ID or RDSSecretArn tag for $name" >&2
+              return 1
+            fi
 
-      - name: Send deployment to EC2 through SSM
+            printf '%s\t%s\n' "$instance_id" "$secret_arn"
+          }
+
+          API_INFO="$(find_instance marketwatch-api)"
+          COLLECTOR_INFO="$(find_instance marketwatch-collector)"
+
+          echo "API_INSTANCE_ID=$(cut -f1 <<< "$API_INFO")" >> "$GITHUB_ENV"
+          echo "API_DB_SECRET_ARN=$(cut -f2 <<< "$API_INFO")" >> "$GITHUB_ENV"
+          echo "COLLECTOR_INSTANCE_ID=$(cut -f1 <<< "$COLLECTOR_INFO")" >> "$GITHUB_ENV"
+          echo "COLLECTOR_DB_SECRET_ARN=$(cut -f2 <<< "$COLLECTOR_INFO")" >> "$GITHUB_ENV"
+
+      - name: Deploy API through SSM
         shell: bash
         run: |
           set -euo pipefail
 
           SCRIPT_B64="$(base64 -w 0 scripts/deploy-ec2.sh)"
-          COMPOSE_B64="$(base64 -w 0 compose.prod.yaml)"
+          COMPOSE_B64="$(base64 -w 0 compose.api.yaml)"
 
           jq -n \
             --arg script "$SCRIPT_B64" \
             --arg compose "$COMPOSE_B64" \
-            --arg secret "$DB_SECRET_ARN" \
+            --arg secret "$API_DB_SECRET_ARN" \
             '{
               commands: [
-                "#!/bin/bash",
                 "set -eu",
                 "mkdir -p /opt/marketwatch",
                 ("printf %s " + ($script | @sh) + " | base64 -d > /opt/marketwatch/deploy-ec2.sh"),
-                ("printf %s " + ($compose | @sh) + " | base64 -d > /opt/marketwatch/compose.prod.yaml"),
+                ("printf %s " + ($compose | @sh) + " | base64 -d > /opt/marketwatch/compose.api.yaml"),
                 "chmod 700 /opt/marketwatch/deploy-ec2.sh",
                 ("export DB_SECRET_ARN=" + ($secret | @sh) + " && /opt/marketwatch/deploy-ec2.sh")
               ]
@@ -93,48 +105,45 @@ jobs:
 
           COMMAND_ID="$(aws ssm send-command \
             --region "$AWS_REGION" \
-            --instance-ids "$INSTANCE_ID" \
+            --instance-ids "$API_INSTANCE_ID" \
             --document-name "AWS-RunShellScript" \
-            --comment "Deploy MarketWatch from GitHub Actions" \
+            --comment "Deploy MarketWatch API from GitHub Actions" \
             --parameters file://ssm-parameters.json \
             --query "Command.CommandId" \
             --output text)"
 
-          echo "SSM deployment command submitted."
+          ./scripts/wait-for-ssm.sh "$COMMAND_ID" "$API_INSTANCE_ID" "$AWS_REGION"
 
-          for attempt in $(seq 1 60); do
-            STATUS="$(aws ssm get-command-invocation \
-              --region "$AWS_REGION" \
-              --command-id "$COMMAND_ID" \
-              --instance-id "$INSTANCE_ID" \
-              --query "Status" \
-              --output text 2>/dev/null || true)"
+      - name: Deploy collector through SSM
+        shell: bash
+        run: |
+          set -euo pipefail
 
-            case "$STATUS" in
-              Success)
-                echo "EC2 deployment completed successfully."
-                aws ssm get-command-invocation \
-                  --region "$AWS_REGION" \
-                  --command-id "$COMMAND_ID" \
-                  --instance-id "$INSTANCE_ID" \
-                  --query "StandardOutputContent" \
-                  --output text
-                exit 0
-                ;;
-              Failed|TimedOut|Cancelled|Cancelling)
-                echo "ERROR: EC2 deployment ended with status: $STATUS"
-                aws ssm get-command-invocation \
-                  --region "$AWS_REGION" \
-                  --command-id "$COMMAND_ID" \
-                  --instance-id "$INSTANCE_ID" \
-                  --query "[StandardOutputContent,StandardErrorContent]" \
-                  --output json
-                exit 1
-                ;;
-            esac
+          SCRIPT_B64="$(base64 -w 0 scripts/deploy-collector-ec2.sh)"
+          COMPOSE_B64="$(base64 -w 0 compose.collector.yaml)"
 
-            sleep 5
-          done
+          jq -n \
+            --arg script "$SCRIPT_B64" \
+            --arg compose "$COMPOSE_B64" \
+            --arg secret "$COLLECTOR_DB_SECRET_ARN" \
+            '{
+              commands: [
+                "set -eu",
+                "mkdir -p /opt/marketwatch",
+                ("printf %s " + ($script | @sh) + " | base64 -d > /opt/marketwatch/deploy-collector-ec2.sh"),
+                ("printf %s " + ($compose | @sh) + " | base64 -d > /opt/marketwatch/compose.collector.yaml"),
+                "chmod 700 /opt/marketwatch/deploy-collector-ec2.sh",
+                ("export DB_SECRET_ARN=" + ($secret | @sh) + " && /opt/marketwatch/deploy-collector-ec2.sh")
+              ]
+            }' > ssm-parameters.json
 
-          echo "ERROR: Timed out waiting for deployment. Check Systems Manager Run Command."
-          exit 1
+          COMMAND_ID="$(aws ssm send-command \
+            --region "$AWS_REGION" \
+            --instance-ids "$COLLECTOR_INSTANCE_ID" \
+            --document-name "AWS-RunShellScript" \
+            --comment "Deploy MarketWatch collector from GitHub Actions" \
+            --parameters file://ssm-parameters.json \
+            --query "Command.CommandId" \
+            --output text)"
+
+          ./scripts/wait-for-ssm.sh "$COMMAND_ID" "$COLLECTOR_INSTANCE_ID" "$AWS_REGION"
