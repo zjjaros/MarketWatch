@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+trap 'rc=$?; echo "[deploy] FAILED at line $LINENO (exit $rc)" >&2' ERR
+
 REGION="us-west-2"
 ACCOUNT_ID="997956187142"
 ECR_REPOSITORY="marketwatch"
@@ -9,18 +11,22 @@ COMPOSE_FILE="/opt/marketwatch/compose.api.yaml"
 DB_INSTANCE_IDENTIFIER="marketwatch-db"
 DB_NAME="marketwatch"
 
+echo "[deploy] Starting"
+echo "[deploy] Checking required tools"
 # Ensure required tools are installed.
 command -v docker >/dev/null
 command -v aws >/dev/null
 command -v python3 >/dev/null
 command -v curl >/dev/null
 
+echo "[deploy] Retrieving database secret"
 # Confirm that the current RDS secret ARN was supplied by the workflow.
 if [[ -z "${DB_SECRET_ARN:-}" ]]; then
   echo "ERROR: DB_SECRET_ARN is not set."
   exit 1
 fi
 
+echo "[deploy] Discovering RDS endpoint"
 # Retrieve the RDS-managed database credentials.
 # Never print this value to the deployment log.
 SECRET_JSON="$(aws secretsmanager get-secret-value \
@@ -74,20 +80,25 @@ fi
 
 cd /opt/marketwatch
 
+echo "[deploy] Logging into ECR"
 # Authenticate to ECR and pull the latest API image.
 aws ecr get-login-password --region "$REGION" |
   docker login --username AWS --password-stdin \
     "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
+echo "[deploy] Pulling image"
 docker compose -f "$COMPOSE_FILE" pull
 
+echo "[deploy] Running migrations"
 # Apply database migrations before starting the API.
 docker compose -f "$COMPOSE_FILE" run --rm api alembic upgrade head
 
+echo "[deploy] Starting API"
 # Start only the API. --remove-orphans stops the old collector
 # container on this host, since it is no longer in this Compose file.
 docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
 
+echo "[deploy] Checking API health"
 # Wait for the API to become responsive.
 for attempt in $(seq 1 30); do
   if curl --fail --silent http://localhost:8000/prices >/dev/null; then
