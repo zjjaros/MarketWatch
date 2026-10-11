@@ -26,3 +26,24 @@ resource "aws_security_group" "marketwatch_api" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
+resource "aws_security_group" "marketwatch_collector" {
+  name        = "marketwatch-collector"
+  description = "Outbound access for the MarketWatch price collector"
+  vpc_id      = module.vpc.vpc_id
+
+  # No inbound rules required.
+  # The collector initiates all connections.
+  egress {
+    description = "Outbound HTTPS, database, and service access"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name    = "marketwatch-collector"
+    Project = "MarketWatch"
+  }
+}

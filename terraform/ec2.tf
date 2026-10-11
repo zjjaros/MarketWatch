@@ -40,3 +40,28 @@ resource "aws_instance" "marketwatch_api" {
     ignore_changes = [ami]
   }
 }
+
+
+resource "aws_instance" "marketwatch_collector" {
+  ami           = data.aws_ami.ubuntu.id
+  instance_type = "t3.micro"
+
+  subnet_id                   = module.vpc.public_subnets[0]
+  vpc_security_group_ids      = [aws_security_group.marketwatch_collector.id]
+  associate_public_ip_address = true
+
+  iam_instance_profile = aws_iam_instance_profile.marketwatch_collector.name
+
+  user_data                   = file("${path.module}/user-data.sh")
+  user_data_replace_on_change = true
+
+  tags = {
+    Name         = "marketwatch-collector"
+    Project      = "MarketWatch"
+    RDSSecretArn = aws_db_instance.marketwatch.master_user_secret[0].secret_arn
+  }
+
+  lifecycle {
+    ignore_changes = [ami]
+  }
+}

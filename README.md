@@ -40,6 +40,9 @@ docker compose exec <imagename> <command>
 #get IP of EC2:
 aws ec2 describe-instances --filters "Name=tag:Name,Values=marketwatch-api" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text
 
+#get state of a resource:
+ex: terraform state show aws_instance.marketwatch_collector
+
 #ssh
 ssh -i "$HOME\.ssh\<YOUR_PEM_FILE>.pem" ubuntu@<YOUR_EC2_PUBLIC_IP>
 

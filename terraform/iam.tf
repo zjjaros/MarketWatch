@@ -195,3 +195,82 @@ resource "aws_iam_role_policy" "marketwatch_rds_discovery" {
     ]
   })
 }
+
+
+resource "aws_iam_role" "marketwatch_collector" {
+  name = "MarketWatchCollectorRole"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "ec2.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_instance_profile" "marketwatch_collector" {
+  name = "MarketWatchCollectorProfile"
+  role = aws_iam_role.marketwatch_collector.name
+}
+
+resource "aws_iam_role_policy_attachment" "marketwatch_collector_ssm_core" {
+  role       = aws_iam_role.marketwatch_collector.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
+resource "aws_iam_role_policy" "marketwatch_collector_ecr_pull" {
+  name = "MarketWatchCollectorECRPull"
+  role = aws_iam_role.marketwatch_collector.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect   = "Allow"
+        Action   = ["ecr:GetAuthorizationToken"]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+        Resource = aws_ecr_repository.marketwatch.arn
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy" "marketwatch_collector_rds_secret" {
+  name = "MarketWatchCollectorRDSSecret"
+  role = aws_iam_role.marketwatch_collector.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["secretsmanager:GetSecretValue"]
+      Resource = aws_db_instance.marketwatch.master_user_secret[0].secret_arn
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "marketwatch_collector_rds_discovery" {
+  name = "MarketWatchCollectorRDSDiscovery"
+  role = aws_iam_role.marketwatch_collector.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect   = "Allow"
+      Action   = ["rds:DescribeDBInstances"]
+      Resource = "*"
+    }]
+  })
+}

@@ -7,7 +7,7 @@ REGION="us-west-2"
 ACCOUNT_ID="997956187142"
 ECR_REPOSITORY="marketwatch"
 IMAGE="${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com/${ECR_REPOSITORY}:latest"
-COMPOSE_FILE="/opt/marketwatch/compose.prod.yaml"
+COMPOSE_FILE="/opt/marketwatch/compose.api.yaml"
 DB_INSTANCE_IDENTIFIER="marketwatch-db"
 DB_NAME="marketwatch"
 
@@ -76,23 +76,24 @@ fi
 
 cd /opt/marketwatch
 
-# Authenticate to ECR and pull the latest image.
+# Authenticate to ECR and pull the latest API image.
 aws ecr get-login-password --region "$REGION" |
   docker login --username AWS --password-stdin \
     "${ACCOUNT_ID}.dkr.ecr.${REGION}.amazonaws.com"
 
 docker compose -f "$COMPOSE_FILE" pull
 
-# Apply database migrations once, before starting the new containers.
+# Apply database migrations before starting the API.
 docker compose -f "$COMPOSE_FILE" run --rm api alembic upgrade head
 
-# Start or recreate the API and collector containers.
+# Start only the API. --remove-orphans stops the old collector
+# container on this host, since it is no longer in this Compose file.
 docker compose -f "$COMPOSE_FILE" up -d --remove-orphans
 
 # Wait for the API to become responsive.
 for attempt in $(seq 1 30); do
   if curl --fail --silent http://localhost:8000/prices >/dev/null; then
-    echo "Deployment successful: API health check passed."
+    echo "API deployment successful: health check passed."
     docker compose -f "$COMPOSE_FILE" ps
     exit 0
   fi
@@ -101,5 +102,5 @@ for attempt in $(seq 1 30); do
 done
 
 echo "ERROR: API did not become healthy. Recent container logs:"
-docker compose -f "$COMPOSE_FILE" logs --tail=80 api collector
+docker compose -f "$COMPOSE_FILE" logs --tail=80 api
 exit 1
