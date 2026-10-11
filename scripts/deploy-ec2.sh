@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 set -Eeuo pipefail
 
+echo "[deploy] Starting"
+
 trap 'rc=$?; echo "[deploy] FAILED at line $LINENO (exit $rc)" >&2' ERR
 
 REGION="us-west-2"
@@ -11,13 +13,16 @@ COMPOSE_FILE="/opt/marketwatch/compose.api.yaml"
 DB_INSTANCE_IDENTIFIER="marketwatch-db"
 DB_NAME="marketwatch"
 
-echo "[deploy] Starting"
-echo "[deploy] Checking required tools"
 # Ensure required tools are installed.
-command -v docker >/dev/null
-command -v aws >/dev/null
-command -v python3 >/dev/null
-command -v curl >/dev/null
+echo "[deploy] Checking required tools"
+for tool in docker aws python3 curl; do
+  if command -v "$tool" >/dev/null 2>&1; then
+    echo "[deploy] Found $tool: $(command -v "$tool")"
+  else
+    echo "[deploy] ERROR: $tool is not available on PATH" >&2
+    exit 1
+  fi
+done
 
 echo "[deploy] Retrieving database secret"
 # Confirm that the current RDS secret ARN was supplied by the workflow.
