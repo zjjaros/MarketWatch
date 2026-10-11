@@ -112,7 +112,7 @@ jobs:
             --query "Command.CommandId" \
             --output text)"
 
-          ./scripts/wait-for-ssm.sh "$COMMAND_ID" "$API_INSTANCE_ID" "$AWS_REGION"
+          bash scripts/wait-for-ssm.sh "$COMMAND_ID" "$API_INSTANCE_ID" "$AWS_REGION"
 
       - name: Deploy collector through SSM
         shell: bash
@@ -146,4 +146,4 @@ jobs:
             --query "Command.CommandId" \
             --output text)"
 
-          ./scripts/wait-for-ssm.sh "$COMMAND_ID" "$COLLECTOR_INSTANCE_ID" "$AWS_REGION"
+          bash scripts/wait-for-ssm.sh "$COMMAND_ID" "$COLLECTOR_INSTANCE_ID" "$AWS_REGION"
