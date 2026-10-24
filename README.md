@@ -1,73 +1,63 @@
-# MarketWatch README
-*Author: Zach Jaros* (<zjaros@hotmail.com>)  
-*License: MIT*
+# MarketWatch
 
-## What is MarketWatch?
+**Author:** Zach Jaros  
+**License:** MIT
 
-MarktetWatch is a personal, educational project that allows myself (and any other contributers) to experiment with:
-1. Terraform (Infrastructure as Code [__IaC__])
-2. Docker (containerization)
-3. AWS (cloud infrastructure)
-    - Elastic Compute Cloud (__EC2__)
-    - Relational Database Service (__RDS__)
-    - Elastic Container Registry (__ECR__)
-    - Security Groups
-    - Identity and Access Management (__IAM__)
-    - Virtual Private Cloud (__VPC__)
-    - OpenID Connect (__OIDC__)
-    - Systems Manager (__SSM__)
-    - Secrets Manager
-4. FastAPI (amazing python lib for REST APIs)
-5. Alembic (Relational DB change-tracking and control)
-6. SQLAlchemy (Nifty code-first database design)
-7. PostgreSQL (modern, popular relation database)
-8. HTML/Javascript (frontend)
-9. GitHub Actions
+MarketWatch is a cloud-hosted market-data application that collects Bitcoin and gold prices, persists historical observations in PostgreSQL, and exposes the data through a REST API.
 
-with an emphasis on:
-- Simple, one-button-press "Bring-up"/"Tear down" capability without data-loss or manual interventions.
-- Secure cloud infrastrucure practices.
-    - Effective use of VPC (virtual private cloud) and public/private subnets to protect exposure to the whole internet.
-    - Strict as-needed permissions established by IAM Policies and specific resource roles.
-- Optimized workflows: Utilizing Github Actions to handle deployment whenever changes are made by a developer. 
+The project serves as a practical exploration of cloud infrastructure, application development, deployment automation, and operational resilience using AWS and Terraform.
 
-## What does MarketWatch do?
+## Table of Contents
 
-Simply put: It reads bitcoin and gold data from external providers and records those values into a database every 5 minutes (via what's called the "collector"). There is a very rudimentary front end that can show basic trends of this collected data. Other REST API calls can retrieve the raw json data from the DB.
+- [Key Features](#key-features)
+- [Technology Stack](#technology-stack)
+- [Architecture](#architecture)
+- [Application Component: API](#application-component-api)
+- [Application Component: Collector](#application-component-collector)
+- [Application Component: Database](#application-component-database)
+- [Application Component: Frontend](#application-component-frontend)
+- [Cost Management](#cost-management)
+- [Design Decisions](#design-decisions)
+- [IAM Permissions](#iam-permissions)
+- [Useful Commands](#useful-commands)
 
-More technically
+## Key Features
 
-- There are two EC2 instances in AWS:
-    1. __marketwatch-api__: Serves the REST API functions.
-    2. __marketwatch-collector__: Hits the BTC and gold data providers and enters the gathered data into the PostgreSQL DB (on an RDS instance in AWS)
-- There is an RDS instance that hosts the PostgreSQL server
+- **Infrastructure as Code:** Provision and manage AWS infrastructure with Terraform.
+- **Containerized workloads:** Package the API and collector into Docker images for consistent deployment.
+- **Automated CI/CD:** Use GitHub Actions to build and publish images to Amazon ECR, then trigger deployments through AWS Systems Manager.
+- **Cloud security:** Use GitHub OIDC federation, IAM roles, security groups, private subnets, and AWS Secrets Manager to control access.
+- **Persistent storage:** Store historical observations in Amazon RDS for PostgreSQL, with Alembic managing schema migrations.
+- **Infrastructure recovery:** Use PowerShell scripts and RDS snapshots to support infrastructure teardown and restoration.
 
-## Cost and Budget
-With Amazon AWS Free Tier, you can play around with this infrastructure for a good amount of time before you need to worry, but I would recommend keeping track of expenses as you go (and setting up a budget alert!). You get $100 of free credits, and I got an extra $60 during this process because I inadvertedly hit some AWS incentives.
+## Technology Stack
 
-- __RDS__: Highest cost, but even then its not too pricey
-- __EC2__: Second highest cost
-- __VPC__: Low cost
-- __Security Manager__: Almost negligable (a few cents)
+| Category | Technologies |
+|---|---|
+| Application | Python, FastAPI, SQLAlchemy, Alembic |
+| Database | PostgreSQL, Amazon RDS |
+| Containers | Docker, Docker Compose, Amazon ECR |
+| Infrastructure | Terraform, Amazon EC2, VPC, subnets, security groups |
+| Security | IAM, OIDC, AWS Secrets Manager |
+| Deployment | GitHub Actions, AWS Systems Manager |
+| Development | Git, `uv`, HTML/JavaScript (where applicable) |
 
-For a reference point, I ran this setup off and on for a week, and it totalled __$3.78__
+The project emphasizes reproducible infrastructure, controlled access, automated deployment, and the separation of data collection, API serving, and persistent storage.
 
-*Basic rule*: Don't leave this running non-stop for 7 months then realize you burned through many credits.
-
-## Architecture
+# Architecture
 
 MarketWatch is a containerized market-data application deployed on AWS using Terraform-managed infrastructure. The system separates data collection, API serving, and persistent storage into independent components.
 
 The application runs on two EC2 instances: one hosts the FastAPI application, while the other runs the data collector. Both connect to a private Amazon RDS for PostgreSQL instance, allowing the collector to continue gathering data independently of API traffic.
 
-### Data Flow
+## Data Flow
 
 1. The collector retrieves market-price data from external providers.
 2. Retrieved observations are persisted to PostgreSQL using SQLAlchemy.
 3. The FastAPI application queries PostgreSQL and exposes historical observations and trend data through HTTP endpoints.
 4. Clients access the API through its public endpoint.
 
-### Deployment Flow
+## Deployment Flow
 
 1. Changes are pushed to the GitHub repository.
 2. GitHub Actions builds the application’s Docker image.
@@ -75,21 +65,36 @@ The application runs on two EC2 instances: one hosts the FastAPI application, wh
 4. GitHub Actions authenticates to AWS using OpenID Connect (OIDC) and initiates deployment through AWS Systems Manager (SSM).
 5. The API and collector instances independently pull and run the updated image.
 
-### Infrastructure
+## Infrastructure
 
 Terraform manages the AWS resources, including the VPC, subnets, security groups, EC2 instances, IAM roles, ECR repository, and RDS database.
 
 The database resides in private subnets and is not directly accessible from the public internet. EC2 security groups control application and database connectivity, while AWS Secrets Manager stores the database's managed master credentials.
 
----
 
-## Application Component: API
+```mermaid
+flowchart TD
+    A[External Price Providers] --> B[Collector EC2]
+    B --> C[(PostgreSQL on Amazon RDS)]
+    C --> D[API EC2 - FastAPI]
+    D --> E[API Clients]
+
+    F[GitHub Repository] --> G[GitHub Actions]
+    G --> H[Amazon ECR]
+    G --> I[AWS Systems Manager]
+    H --> B
+    H --> D
+    I --> B
+    I --> D
+```
+
+# Application Component: API
 
 The API is built with FastAPI and provides HTTP access to the market observations stored in PostgreSQL.
 
 SQLAlchemy handles database interactions, while Alembic manages schema migrations. This separates application-level data access from database schema evolution and allows migrations to be applied as part of deployment.
 
-### Endpoints
+## Endpoints
 
 | Endpoint | Description |
 |---|---|
@@ -101,19 +106,16 @@ The API runs in a Docker container on a dedicated EC2 instance. Its deployment p
 
 Separating the API from the collector allows either component to be deployed or restarted without requiring both workloads to share the same compute instance.
 
----
-
-## Application Component: Collector
+# Application Component: Collector
 
 The collector is responsible for retrieving external market-price data and persisting observations to PostgreSQL.
 
 It runs independently of the API in its own Docker container on a dedicated EC2 instance. This separation isolates scheduled data collection from API request handling and allows the workloads to be managed independently.
 
-### Data Sources
+## Data Sources
 
 The collector integrates with external providers for cryptocurrency and gold-price data, including:
 
-- **Binance** — cryptocurrency market data.
 - **CoinGecko** — Bitcoin price data in USD.
 - **GoldPriceAPI** — gold spot-price data, including the XAU-USD-SPOT instrument.
 
@@ -121,13 +123,11 @@ Collected observations are written to PostgreSQL through SQLAlchemy. The databas
 
 The collector and API share the same application image but use separate Docker Compose configurations and EC2 instances. This avoids running duplicate collection processes when deploying or restarting the API.
 
----
-
-## Application Component: Database
+# Application Component: Database
 
 MarketWatch uses Amazon RDS for PostgreSQL as its persistent data store. The database is deployed in private subnets and accepts connections from the application components through security-group rules.
 
-### Schema and Persistence
+## Schema and Persistence
 
 The `price_observations` table stores collected market data, including:
 
@@ -139,13 +139,13 @@ The `price_observations` table stores collected market data, including:
 
 SQLAlchemy provides the application's database access layer, and Alembic tracks and applies schema migrations. This allows database changes to be version-controlled alongside application code.
 
-### Credentials and Security
+## Credentials and Security
 
 The RDS instance uses AWS-managed master credentials stored in AWS Secrets Manager. The application retrieves the necessary connection information at deployment time using its EC2 IAM role.
 
 The database is not publicly accessible. Connectivity is restricted to authorized application security groups, keeping database access separate from public API access.
 
-### Backup and Recovery
+## Backup and Recovery
 
 The project includes PowerShell scripts for infrastructure teardown and recovery:
 
@@ -154,421 +154,125 @@ The project includes PowerShell scripts for infrastructure teardown and recovery
 
 This approach allows the compute and networking resources to be recreated while preserving historical observations in the database snapshot.
 
----
+# Application Component: Frontend
 
-## Application Component: Frontend
+The MarketWatch frontend is a lightweight HTML/JavaScript interface that displays current Bitcoin and gold prices alongside historical market trends. It communicates with the FastAPI backend to retrieve price data and calculate summary statistics for user-selected time periods.
 
-The current implementation focuses on the data-collection pipeline, PostgreSQL persistence, and HTTP API. A standalone frontend is not yet part of the deployed application.
+## Current Features
 
-The API provides the foundation for a future user interface that could display current prices, historical price series, and Bitcoin trend data.
+- **Current Prices:** Retrieves and displays the latest available Bitcoin (BTC) and gold prices in USD.
+- **Historical High and Low:** Identifies the highest and lowest prices within the selected period, including the associated observation timestamp or an indication that the current price establishes a new high or low.
+- **Percentage Change:** Displays the percentage change between the earliest and latest observations returned for the selected period, with color-coded text to distinguish positive and negative changes.
+- **Configurable Time Periods:** Provides 1-day, 7-day, 30-day, and 1-year views for both assets. Selecting a period triggers a new API request and updates the corresponding statistics.
 
-A frontend could be implemented as a separate application consuming the existing API, allowing the presentation layer to evolve independently of data collection and storage.
+## Implementation
 
----
+The interface is implemented using standard HTML and JavaScript, without a frontend framework. The JavaScript uses the Fetch API to retrieve current prices from `GET /prices` and historical trend observations from `GET /prices/{asset}/trend?days={days}`.
 
-## Local Development
+The frontend processes the returned historical observations to determine the high and low prices and calculate the percentage change. The FastAPI backend provides the underlying data from the PostgreSQL database, keeping data collection and persistence separate from the presentation layer.
 
-### Prerequisites
+The frontend is intentionally minimal, providing a functional overview of market conditions while leaving room for future enhancements such as interactive charts, improved formatting, and additional assets.
 
-The following tools are used for local development:
+# Cost Management
 
-- Python 3.14
-- `uv` for Python environment and dependency management
-- Docker and Docker Compose, if running PostgreSQL locally in a container
-- Git
-- AWS CLI and Terraform for infrastructure management and deployment workflows
+MarketWatch uses AWS resources that can incur charges while provisioned, even when the application is idle.
 
-### Python Environment
+During one development period, the deployed infrastructure incurred **$3.78 over approximately one week of intermittent use**. This is a historical observation from my own environment, not a guaranteed operating cost or pricing estimate.
 
-Clone the repository and navigate to the project directory:
+The main resources to monitor are:
 
-```bash
-git clone https://github.com/zjjaros/MarketWatch.git
-cd MarketWatch
-```
+- **Amazon RDS:** Database instance runtime, storage, backups, and retained snapshots.
+- **Amazon EC2:** Compute instance runtime and associated storage.
+- **Networking:** Public IPv4 addresses, data transfer, and any paid networking services.
+- **AWS Secrets Manager:** Secret storage and API usage.
 
-Create the virtual environment and install the project dependencies using `uv`:
-
-```bash
-uv sync
-```
-
-Configure the required environment variables, including `DATABASE_URL`, to point to an accessible PostgreSQL database.
-
-### Database Migrations
-
-Apply the current database schema using Alembic:
-
-```bash
-uv run alembic upgrade head
-```
-
-This creates or upgrades the database schema to the latest migration revision.
-
-### Running the API
-
-Start the FastAPI development server:
-
-```bash
-uv run uvicorn api.main:app --reload
-```
-
-The API is then available locally at `http://localhost:8000`, assuming the module path matches the current application entry point.
-
-Interactive API documentation is available at `http://localhost:8000/docs`.
-
-### Running the Collector
-
-In a separate terminal, run the collector:
-
-```bash
-uv run python -m collector.main
-```
-
-The collector requires a valid database connection and any necessary external-provider configuration.
-
-### Configuration Notes
-
-Keep credentials and environment-specific configuration out of source control. Use local environment variables or an untracked environment file for development, and use AWS IAM and Secrets Manager for deployed workloads.
-
-Local development does not require Terraform or AWS deployment to be run every time application code changes. The API and collector can be tested independently against a development PostgreSQL database.
-
-## IAM Policy Permissions
-I concocted this list of permissions through a monumental amount of trial and error. I think this list is preferred over simply giving yourself "AllAccess" to everything. The following is all the permissions you SHOULD need for working on this project:
-
-    "ec2:AssociateIamInstanceProfile",
-    "ec2:AssociateRouteTable",
-    "ec2:AttachInternetGateway",
-    "ec2:AuthorizeSecurityGroupEgress",
-    "ec2:AuthorizeSecurityGroupIngress",
-    "ec2:CreateInternetGateway",
-    "ec2:CreateNetworkAclEntry",
-    "ec2:CreateRoute",
-    "ec2:CreateRouteTable",
-    "ec2:CreateSecurityGroup",
-    "ec2:CreateSubnet",
-    "ec2:CreateTags",
-    "ec2:CreateVpc",
-    "ec2:DeleteInternetGateway",
-    "ec2:DeleteNetworkAclEntry",
-    "ec2:DeleteRoute",
-    "ec2:DeleteRouteTable",
-    "ec2:DeleteSecurityGroup",
-    "ec2:DeleteSubnet",
-    "ec2:DeleteVpc",
-    "ec2:DescribeIamInstanceProfileAssociations",
-    "ec2:DescribeImages",
-    "ec2:DescribeInstanceAttribute",
-    "ec2:DescribeInstanceCreditSpecifications",
-    "ec2:DescribeInstanceStatus",
-    "ec2:DescribeInstanceTypes",
-    "ec2:DescribeInstances",
-    "ec2:DescribeInternetGateways",
-    "ec2:DescribeNetworkAcls",
-    "ec2:DescribeNetworkInterfaces",
-    "ec2:DescribeRouteTables",
-    "ec2:DescribeSecurityGroupRules",
-    "ec2:DescribeSecurityGroups",
-    "ec2:DescribeSubnets",
-    "ec2:DescribeTags",
-    "ec2:DescribeVolumes",
-    "ec2:DescribeVpcAttribute",
-    "ec2:DescribeVpcs",
-    "ec2:DetachInternetGateway",
-    "ec2:DisassociateRouteTable",
-    "ec2:GetConsoleOutput",
-    "ec2:ModifyVpcAttribute",
-    "ec2:RevokeSecurityGroupEgress",
-    "ec2:RevokeSecurityGroupIngress",
-    "ec2:RunInstances",
-    "ec2:TerminateInstances",
-    "ecr:BatchCheckLayerAvailability",
-    "ecr:BatchGetImage",
-    "ecr:CompleteLayerUpload",
-    "ecr:CreateRepository",
-    "ecr:DeleteRepository",
-    "ecr:DescribeImages",
-    "ecr:DescribeRepositories",
-    "ecr:GetAuthorizationToken",
-    "ecr:GetDownloadUrlForLayer",
-    "ecr:InitiateLayerUpload",
-    "ecr:ListTagsForResource",
-    "ecr:PutImage",
-    "ecr:UploadLayerPart",
-    "iam:AddRoleToInstanceProfile",
-    "iam:AttachRolePolicy",
-    "iam:CreateInstanceProfile",
-    "iam:CreateOpenIDConnectProvider",
-    "iam:CreateRole",
-    "iam:DeleteInstanceProfile",
-    "iam:DeleteOpenIDConnectProvider",
-    "iam:DeleteRole",
-    "iam:DeleteRolePolicy",
-    "iam:DetachRolePolicy",
-    "iam:GetInstanceProfile",
-    "iam:GetOpenIDConnectProvider",
-    "iam:GetRole",
-    "iam:GetRolePolicy",
-    "iam:ListAttachedRolePolicies",
-    "iam:ListInstanceProfilesForRole",
-    "iam:ListRolePolicies",
-    "iam:ListRoles",
-    "iam:PutRolePolicy",
-    "iam:RemoveRoleFromInstanceProfile",
-    "iam:SimulatePrincipalPolicy",
-    "iam:UpdateAssumeRolePolicy",
-    "kms:DescribeKey",
-    "rds:AddTagsToResource",
-    "rds:CreateDBInstance",
-    "rds:CreateDBSnapshot",
-    "rds:CreateDBSubnetGroup",
-    "rds:DeleteDBInstance",
-    "rds:DeleteDBSubnetGroup",
-    "rds:DescribeDBInstances",
-    "rds:DescribeDBSnapshots",
-    "rds:DescribeDBSubnetGroups",
-    "rds:ListTagsForResource",
-    "rds:ModifyDBInstance",
-    "rds:ModifyDBSubnetGroup",
-    "rds:RemoveTagsFromResource",
-    "rds:RestoreDBInstanceFromDBSnapshot",
-    "secretsmanager:CreateSecret",
-    "secretsmanager:DeleteSecret",
-    "secretsmanager:DescribeSecret",
-    "secretsmanager:GetSecretValue",
-    "secretsmanager:TagResource",
-    "secretsmanager:UpdateSecret",
-    "ssm:DescribeInstanceInformation",
-    "ssm:GetCommandInvocation",
-    "ssm:SendCommand"
-
-## Design Decisions
-### *Why Terraform?*
-
-Terraform is an excellent choice for working with IaC. After completing the basic tutorial for Terraform provided by HashiCorp, I wanted to test my knowledge with a personal project, and MarketWatch was born.
-
-### *Why RDS instead of hosting PostgreSQL on EC2*
-
-RDS is the industry, production resource for PostgreSQL relational databases. Not only does it have all these under-the-hood support for PSQL DBs, RDS already has consideration for snapshots, recovery, etc. One note: RDS is more costly of a resource than EC2, so if you're really on a shoe-string budget, you could get by using an EC2 instance, but that will come with a number of work-arounds you'll need to make the data-preservation and database creation work.
-
-### *Why Docker and ECR*
-
-Docker containerization just makes life easier. Once the image is made, you can be sure the environment youre running this application is is viable and won't give you trouble. ECR was a no-brainer as a way to store and distribute images to resources that need them.
-
-### *Why OIDC instead of long-lived AWS credentials*
-
-OIDC is closer to professional production environments. I wanted to avoid having passwords/secrets stored in numerous places, so whenever we could have resources "borrow" permissions (safely with policy groups), I did.
-
-### *Why SSM instead of SSH-based deployment*
-
-Similar to the OIDC reasoning. If there is an Amazon resource that can handle this case, without having to store SSH passwords somewhere, I might as well go that route and save myself some hassle.
-
-### *Why the collector runs independently from the API*
-
-They have very distinct, separate responsibilities so it makes sense to separate them. API can focus solely on serving the user. Collector can do it's own thing elsewhere. Neither has to care about the other. They interact indirectly via the relational database, which is good design.
-
-## Annoying Hangups To Watch For
-1. Powershell will sometimes put special end of line characters that can have you chasing errors for a while.
-2. No empty lines before "#!/bin/bash" in the shell scripts! That one took a minute to find.
-3. Careful with partial "apply"s with Terraform. I provided the policy permissions I used for this project, but there were dozens of times where an apply failed because of a missing permission, which then had to be added and another apply operation had to be done. Just make sure you know what terraform state youre in.
-
-## Useful commands
-### UV/Python
-Run a file within the known project area. __NOTE__: Do not add a *.py* extension to the file. 
-
-    uv run python -m path.to.file
-
-Run a specific python file.
-
-    uv run python <file>.py
-### UV/Alembic
-Alemic checks the state of the models vs the DB state
-    
-    uv run alembic check
-
-Generate a scaffoleded python file to execute the changes made in models file. This file is generated in *alembic/versions/<ID>_some_message_.py*
-    
-    uv run alembic revision --autogenerate -m "some message"
-
-Executes the scaffolded code
-
-    uv run alembic upgrade head
-
-Reverses the history of the database by 1 "migration"
-
-    uv run alembic downgrade -1
-
-### Docker
-Build docker image
-
-    docker build -t <imagename> .
+## Cost-control recommendations
 
-List Docker Images
+- Configure an AWS Budget and billing alerts before deploying.
+- Inspect the resources that remain after running the teardown script.
+- Check for retained RDS snapshots and other persistent resources.
+- Review the AWS Cost Explorer breakdown periodically.
+- Verify current Free Tier eligibility and pricing before provisioning resources.
 
-    docker images
+Always review the Terraform plan before applying infrastructure changes, and verify the resulting AWS resources after teardown.
 
-Create containers for images (the *-d* skips you past a prompt)
+# Design Decisions
 
-    docker compose up -d
+## Terraform for Infrastructure as Code
 
-List current containers
+**Decision:** Use Terraform to provision and manage AWS infrastructure.
 
-    docker compose ps 
+**Rationale:** Infrastructure is defined declaratively and version-controlled, making changes repeatable, reviewable, and easier to reproduce. Terraform also makes it possible to tear down and recreate the environment without manually rebuilding each resource.
 
-Build images, then create containers
+**Trade-offs:** Terraform introduces state management and provider/module configuration overhead. Infrastructure changes also require care because an incorrect plan can replace or destroy resources. Persistent data requires separate recovery planning rather than relying on infrastructure recreation alone.
 
-    docker compose up -d --build
+## Amazon RDS for PostgreSQL
 
-Execute a command on a container
+**Decision:** Host PostgreSQL on Amazon RDS rather than on an EC2 instance.
 
-    docker compose exec <imagename> <command>
+**Rationale:** RDS separates database management from application compute and provides managed database operations, backups, and recovery capabilities. Keeping the database in a private subnet also prevents direct public access.
 
-### AWS
-Get the public IP of EC2:
+**Trade-offs:** RDS adds ongoing cost and another managed resource to configure. It also introduces dependencies on AWS networking, credentials, and database availability. For a small demonstration project, hosting PostgreSQL on the same EC2 instance would be cheaper, but would couple database availability and lifecycle to the application host and increase operational responsibility.
 
-    aws ec2 describe-instances --filters "Name=tag:Name,Values=<resource name>" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+## Docker and Amazon ECR
 
-example:
+**Decision:** Package application components as Docker images and store them in Amazon ECR.
 
-    aws ec2 describe-instances --filters "Name=tag:Name,Values=marketwatch-api" "Name=instance-state-name,Values=running" --query "Reservations[0].Instances[0].PublicIpAddress" --output text
+**Rationale:** Container images provide a consistent runtime environment and separate application packaging from deployment. ECR gives EC2 instances a centralized location from which to pull published images.
 
-__NOTE__: THE FOLLOWING MANUAL ROLE CREATIONS SHOULD BE DONE VIA TERRAFORM IN iam.tf
+**Trade-offs:** Docker introduces image-building, registry authentication, storage, and cleanup requirements. Containers also add some operational complexity compared with running a Python application directly on a host. In return, deployments become more consistent and easier to automate.
 
-Manual creating a role for an EC2 instance to use certain permissions
+## GitHub Actions with OIDC
 
-    aws iam create-role `
-    --role-name <your rolename> `
-    --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+**Decision:** Use GitHub Actions for CI/CD and OpenID Connect (OIDC) to authenticate to AWS.
 
-ex:
+**Rationale:** GitHub Actions automates image builds and deployment, while OIDC allows workflows to assume an AWS IAM role using temporary credentials. Restricting the role's trust policy to the intended repository and branch reduces the risk of unauthorized deployments.
 
-    aws iam create-role `
-    --role-name MarketWatchEC2Role `
-    --assume-role-policy-document '{"Version":"2012-10-17","Statement":[{"Effect":"Allow","Principal":{"Service":"ec2.amazonaws.com"},"Action":"sts:AssumeRole"}]}'
+**Trade-offs:** OIDC requires additional IAM trust-policy configuration and careful permission scoping. Deployment also depends on GitHub Actions, AWS IAM, and the availability of the relevant AWS services. This is more involved to set up than manually deploying from a local machine, but produces a repeatable workflow without long-lived AWS access keys in GitHub secrets.
 
-Manually creating a policy for a role:
+## AWS Systems Manager for Deployment
 
-    aws iam put-role-policy `
-    --role-name <your rolename> `
-    --policy-name <your policyname> `
-    --policy-document file://<rel path to your policy>.json
+**Decision:** Use AWS Systems Manager (SSM) to execute deployment commands on EC2 rather than relying on SSH.
 
-Manually creating an instance profile:
+**Rationale:** SSM enables remote management without requiring publicly exposed SSH ports or manually managed SSH keys. GitHub Actions can trigger deployment commands through AWS APIs.
 
-    aws iam create-instance-profile `
-    --instance-profile-name <your profilename>
+**Trade-offs:** Instances require the appropriate IAM permissions, SSM agent functionality, and connectivity to Systems Manager endpoints. This introduces AWS-specific configuration and another service dependency, but reduces the need to manage inbound administrative access.
 
-Manually attaching the role to the instance profile:
+## Separate EC2 Instances for the API and Collector
 
-    aws iam add-role-to-instance-profile `
-    --instance-profile-name <your profilename> `
-    --role-name <your rolename>
+**Decision:** Run the FastAPI service and market-data collector on separate EC2 instances.
 
-Manually connect the instance with the profile:
+**Rationale:** The API handles client requests, while the collector retrieves external prices and persists observations. Separating them isolates their execution environments and allows each component to be deployed, monitored, and scaled independently.
 
-    aws ec2 associate-iam-instance-profile `
-    --instance-id <your instanceID> `
-    --iam-instance-profile Name=<your instanceprofile> `
-    --region us-west-2
+**Trade-offs:** Separate instances increase infrastructure cost and require additional configuration and deployment management. For a small workload, both components could run on one instance. Separate instances are a deliberate architectural choice to demonstrate service isolation and leave room for independent scaling.
 
-Get an instance ID from EC2:
+## Private Networking for the Database
 
-    aws ec2 describe-instances `
-    --filters "Name=tag:Name,Values=<your instancename>" `
-    --query "Reservations[].Instances[].InstanceId" `
-    --output text `
-    --region us-west-2
+**Decision:** Keep the RDS database in private subnets and control access through security groups.
 
-ex:
+**Rationale:** The database does not need to accept direct connections from the public internet. Restricting network access to the application components reduces its attack surface.
 
-    aws ec2 describe-instances `
-    --filters "Name=tag:Name,Values=marketwatch-api" `
-    --query "Reservations[].Instances[].InstanceId" `
-    --output text `
-    --region us-west-2
+**Trade-offs:** Private networking makes administration and troubleshooting less convenient and requires a deliberate connectivity path for migrations and maintenance. This is additional setup compared with a publicly accessible database, but it better reflects a production-oriented architecture.
 
-Get the arn of a secret:
+## Snapshot-Based Infrastructure Recovery
 
-    aws rds describe-db-instances --db-instance-identifier <your instancename> --region us-west-2 --query "DBInstances[0].MasterUserSecret.SecretArn" --output text
-    
-ex:
+**Decision:** Create an RDS snapshot before tearing down the environment and use it when restoring the infrastructure.
 
-    aws rds describe-db-instances --db-instance-identifier marketwatch-db --region us-west-2 --query "DBInstances[0].MasterUserSecret.SecretArn" --output text
+**Rationale:** Compute and networking resources can be recreated with Terraform, while database contents require a separate persistence and recovery strategy. Taking a snapshot before destruction helps preserve collected market data across infrastructure rebuilds.
 
-Get the actual text of the secret (__NOTE: be careful using this!__)
+**Trade-offs:** Snapshots add storage cost and restore time, and they are not a substitute for a tested backup strategy. Recovery also depends on the snapshot being retained and the restoration configuration being correct. The approach is useful for this project because it supports infrastructure teardown without treating the database contents as disposable.
 
-    aws secretsmanager get-secret-value --secret-id "<your arn secret here>" --region us-west-2 --query SecretString --output text
+# IAM Permissions
 
-### Terraform
-Get state of a resource:
+MarketWatch uses AWS Identity and Access Management (IAM) to control access to infrastructure and deployment resources. Permissions are assigned according to each component's responsibilities, following the principle of least privilege wherever practical.
 
-    terraform state show <resource>
+The project uses separate IAM roles for GitHub Actions and EC2 workloads:
 
-example: 
-    
-    terraform state show aws_instance.marketwatch_collector
+- **GitHub Actions deployment role:** Assumed through OpenID Connect (OIDC), allowing the CI/CD workflow to access authorized AWS resources without storing long-lived AWS credentials in GitHub secrets.
+- **EC2 instance roles:** Grant application instances the AWS permissions required for their operational tasks, such as retrieving container images from Amazon ECR, accessing required secrets, and interacting with AWS Systems Manager.
 
-### Shell
-SSH onto a resource
+For a detailed breakdown of the IAM roles, policies, and permissions used by the project, see [IAM Permissions Documentation](./docs/IAMpermissions.md).
 
-    ssh -i "$HOME\.ssh\<YOUR_PEM_FILE>.pem" ubuntu@<PUBLIC_IP>
+# Useful Commands
 
-Copy a file from local machine to a resource:
-
-    scp -i "$HOME\.ssh\<YOUR_PEM_FILE>.pem" <FILE> ubuntu@<YOUR_EC2_PUBLIC_IP>:/tmp/<FILE>
-
-Create a dump file of an existing DB (for restoration later)
-
-    pg_dump -U postgres -d <DB> -F c -f <DB>_backup.dump
-
-Access RDS from EC2
-
-    psql -h marketwatch-db.cbgy00sw8vm2.us-west-2.rds.amazonaws.com -p 5432 -U marketwatch -d marketwatch
-
-__NOTE__: If psql not installed, do the following:
-
-    sudo apt update
-    sudo apt install postgresql-client
-
-
-
-Get a metadata token (__Note__: This IP (169.254.169.254) is specificly reserved for EC2 Instance Metadata Service (IMDS))
-
-    $TOKEN=$(curl -sS -X PUT "http://169.254.169.254/latest/api/token" \
-    -H "X-aws-ec2-metadata-token-ttl-seconds: 21600")
-
-    curl -sS \
-    -H "X-aws-ec2-metadata-token: $TOKEN" \
-    http://169.254.169.254/latest/meta-data/iam/info
-
-
-Install the AWS CLI
-
-    sudo apt install -y awscli
-
-Login to docker from AWS instance (using borrowed permissions)
-
-    aws ecr get-login-password --region us-west-2 | \
-    sudo docker login --username AWS --password-stdin \
-    <your user ID>.dkr.ecr.us-west-2.amazonaws.com
-
-### Restore an old backup:
-
-Copy the dumpfile over to your postgresql instance:
-
-    docker cp .\<your dumpfile>.dump <your postgresql instance>:/tmp/<your dumpfile>.dump
-
-Restore the database using your dump file:
-
-    docker compose exec postgres pg_restore -U <username> -d <database> --clean --if-exists /tmp/<your dumpfile>.dump
-    
-To test:
-    
-    docker compose exec postgres psql -U <username> -d <database> -c "SELECT * FROM <your table>;"
-
-ex:
-
-    docker cp .\marketwatch_backup.dump marketwatch-postgres-1:/tmp/marketwatch_backup.dump
-    docker compose exec postgres pg_restore -U postgres -d marketwatch --clean --if-exists /tmp/marketwatch_backup.dump
-    docker compose exec postgres psql -U postgres -d marketwatch -c "SELECT * FROM price_observations;"
-
+For documentation on commands that might be useful for your own development, see [Command Documentation](./docs/commands.md).
